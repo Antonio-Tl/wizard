@@ -8,6 +8,7 @@ import '@fontsource/inter/latin-600.css';
 import '@fontsource/inter/latin-700.css';
 import './ui/styles.css';
 
+import { CHAT_MIN_GAP } from '../shared/room';
 import type { GameEvent, ServerMsg, View } from '../shared/types';
 import { sfx } from './audio';
 import {
@@ -60,6 +61,7 @@ class App {
     this.table.onIllegal = () => toast('Du musst die ausgespielte Farbe bedienen!', 'err');
     this.hud = new Hud(this.table, {
       send: (m) => this.conn?.send(m),
+      chat: (text) => this.sendChat(text),
       leave: () => this.leave(),
       again: () => this.again(),
       openSettings: () => this.openSettings(),
@@ -252,7 +254,7 @@ class App {
       while (this.queue.length && gen === this.generation) {
         const msg = this.queue.shift()!;
         if (msg.t === 'state') await this.applyState(msg.view, msg.events, !!msg.full);
-        else if (msg.t === 'error') this.onError(msg.code, msg.message);
+        else if (msg.t === 'error') this.onError(msg.code, msg.message, msg.retryIn);
         else if (msg.t === 'chat') {
           this.hud.chat(msg.seat, msg.name, msg.text);
           if (this.mode === 'lobby') updateLobbyChat(this.hud.chatEntries);
@@ -281,6 +283,7 @@ class App {
         (m) => this.conn?.send(m),
         () => this.leave(),
         this.hud.chatEntries,
+        (text) => this.sendChat(text),
       );
       return;
     }
@@ -321,7 +324,22 @@ class App {
     return this.conn;
   }
 
-  private onError(code: string, message: string): void {
+  /** Spamschutz im Client: kurze Sperre nach jeder Nachricht (der Server prüft zusätzlich). */
+  private chatBlockedUntil = 0;
+
+  private sendChat(text: string): boolean {
+    const now = Date.now();
+    if (now < this.chatBlockedUntil) {
+      toast(`Nicht so schnell – du kannst in ${Math.ceil((this.chatBlockedUntil - now) / 1000)} s wieder schreiben.`, 'err');
+      return false;
+    }
+    this.chatBlockedUntil = now + CHAT_MIN_GAP;
+    this.conn?.send({ t: 'chat', text });
+    return true;
+  }
+
+  private onError(code: string, message: string, retryIn?: number): void {
+    if (code === 'chat_rate' && retryIn) this.chatBlockedUntil = Date.now() + retryIn;
     toast(message, 'err');
     if (code === 'rule') this.table.clearPending();
     if (['not_found', 'game_running', 'room_full', 'kicked'].includes(code)) this.toMenu();

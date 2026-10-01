@@ -124,7 +124,7 @@ export type ClientMsg =
 
 export type ServerMsg =
   | { t: 'state'; view: View; events: GameEvent[]; full?: boolean }
-  | { t: 'error'; code: string; message: string }
+  | { t: 'error'; code: string; message: string; retryIn?: number }
   | { t: 'chat'; seat: number; name: string; text: string }
   | { t: 'pong' };
 

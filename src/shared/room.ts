@@ -28,6 +28,9 @@ export interface RoomPlayer {
   replaced: boolean;
   /** Zeitpunkt der Trennung (für automatisches Weiterspielen) */
   disconnectedAt: number | null;
+  /** Zeitpunkte der letzten Chatnachrichten (Spamschutz) */
+  chatTimes?: number[];
+  lastChat?: string;
 }
 
 export interface RoomData {
@@ -67,6 +70,11 @@ const BOT_NAMES = [
 ];
 
 const AUTO_PLAY_AFTER_DISCONNECT = 15000;
+/** Spamschutz: Mindestabstand zwischen Nachrichten und max. Anzahl pro Zeitfenster */
+export const CHAT_MIN_GAP = 1500;
+const CHAT_WINDOW = 10000;
+const CHAT_MAX_IN_WINDOW = 4;
+const CHAT_DUPLICATE_WINDOW = 6000;
 const AUTO_NEXT_ROUND = 30000;
 
 export function createRoomData(code: string | null, options: GameOptions = DEFAULT_OPTIONS): RoomData {
@@ -162,7 +170,28 @@ export class RoomCore {
         case 'chat': {
           const text = String(msg.text ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 160);
           if (!text) return;
-          for (const p of d.players) if (!p.bot) this.hooks.send(p.token, { t: 'chat', seat, name: d.players[seat].name, text });
+          const sender = d.players[seat];
+          const now = this.hooks.now();
+          const times = (sender.chatTimes ?? []).filter((t) => now - t < CHAT_WINDOW);
+          const last = times[times.length - 1] ?? 0;
+          let wait = 0;
+          if (now - last < CHAT_MIN_GAP) wait = CHAT_MIN_GAP - (now - last);
+          if (times.length >= CHAT_MAX_IN_WINDOW) wait = Math.max(wait, CHAT_WINDOW - (now - times[0]));
+          if (text === sender.lastChat && now - last < CHAT_DUPLICATE_WINDOW) wait = Math.max(wait, CHAT_DUPLICATE_WINDOW - (now - last));
+          sender.chatTimes = times;
+          if (wait > 0) {
+            const secs = Math.ceil(wait / 1000);
+            this.hooks.send(token, {
+              t: 'error',
+              code: 'chat_rate',
+              message: `Nicht so schnell – du kannst in ${secs} s wieder schreiben.`,
+              retryIn: wait,
+            });
+            return;
+          }
+          times.push(now);
+          sender.lastChat = text;
+          for (const p of d.players) if (!p.bot) this.hooks.send(p.token, { t: 'chat', seat, name: sender.name, text });
           return;
         }
         case 'options':

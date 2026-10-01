@@ -8,10 +8,50 @@ import { type Stage, TABLE_R } from './stage';
 import { CARD_H, CARD_W, cardGlowTexture, dealerCoinTexture, ringTexture } from './textures';
 import { type Transform, ease, moveTo, setTransform } from './tween';
 
-const TRICK_R = 2.4;
+/** Tisch-Layout: breit (Desktop/Querformat) und kompakt (Handy im Hochformat) */
+interface Layout {
+  trickR: number;
+  trickScale: number;
+  trumpScale: number;
+  oppR: number;
+  oppScale: number;
+  pileR: number;
+  pileT: number;
+  myPile: [number, number];
+  myCoin: [number, number];
+  coinR: number;
+  labelR: number;
+}
+
+const WIDE: Layout = {
+  trickR: 2.4,
+  trickScale: 1.3,
+  trumpScale: 1.15,
+  oppR: 5.25,
+  oppScale: 0.62,
+  pileR: 3.95,
+  pileT: 0.85,
+  myPile: [2.0, 2.95],
+  myCoin: [-2.3, 3.15],
+  coinR: 4.55,
+  labelR: TABLE_R + 0.35,
+};
+
+const COMPACT: Layout = {
+  trickR: 2.05,
+  trickScale: 1.45,
+  trumpScale: 1.3,
+  oppR: 4.75,
+  oppScale: 0.55,
+  pileR: 3.55,
+  pileT: 0.75,
+  myPile: [2.15, 2.75],
+  myCoin: [-2.2, 2.85],
+  coinR: 4.0,
+  labelR: 5.5,
+};
 /** Karten, die im Menü aufgefächert auf dem Tisch liegen */
 const SHOWCASE = [56, 38, 52, 12, 25];
-const OPP_HAND_R = 5.25;
 const HAND_DIST = 4;
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
@@ -48,6 +88,7 @@ export class TableView {
   private showcase: CardMesh[] = [];
   private n = 4;
   private me = 0;
+  private L: Layout = WIDE;
   private round = 0;
   private view: View | null = null;
 
@@ -111,12 +152,24 @@ export class TableView {
     this.trumpGlow.renderOrder = 3;
     stage.scene.add(this.trumpGlow);
 
+    this.L = this.pickLayout();
     this.layoutLobby(false);
     stage.addFrameCallback((dt, now) => this.frame(dt, now));
+    stage.onResize(() => {
+      const next = this.pickLayout();
+      if (next !== this.L) {
+        this.L = next;
+        if (this.view && this.view.phase !== 'lobby') this.rebuild(this.view);
+      }
+    });
     this.bindPointer();
   }
 
   // ───────────────────────── Geometrie der Plätze ─────────────────────────
+
+  private pickLayout(): Layout {
+    return this.stage.camera.aspect < 0.8 ? COMPACT : WIDE;
+  }
 
   private rel(seat: number): number {
     return (seat - this.me + this.n) % this.n;
@@ -142,7 +195,7 @@ export class TableView {
 
   /** Bildschirmposition (Pixel) eines Spielers für HTML-Labels. */
   seatScreen(seat: number): { x: number; y: number } {
-    const p = this.dir(seat).multiplyScalar(TABLE_R + 0.35);
+    const p = this.dir(seat).multiplyScalar(this.L.labelR);
     p.y = 0.9;
     p.project(this.stage.camera);
     return { x: (p.x * 0.5 + 0.5) * window.innerWidth, y: (-p.y * 0.5 + 0.5) * window.innerHeight };
@@ -167,7 +220,7 @@ export class TableView {
 
   private trumpSlot(): Transform {
     const top = 0.004 + this.deck.length * CARD_T * 1.08;
-    return { pos: new THREE.Vector3(0.3, top + 0.01, 0.2), quat: faceUp(0.32), scale: 1.15 };
+    return { pos: new THREE.Vector3(0.3, top + 0.01, 0.2), quat: faceUp(0.32), scale: this.L.trumpScale };
   }
 
   private trickSlot(seat: number, order: number, card: number): Transform {
@@ -175,17 +228,19 @@ export class TableView {
     const t = this.tangent(seat);
     const pos = d
       .clone()
-      .multiplyScalar(TRICK_R + jitter(card, this.round) * 0.08)
+      .multiplyScalar(this.L.trickR + jitter(card, this.round) * 0.08)
       .addScaledVector(t, jitter(card, this.round + 50) * 0.12);
-    pos.y = 0.03 + order * 0.012;
+    // im Kompakt-Layout liegen die größeren Stichkarten über dem Stapel
+    const base = this.L === COMPACT ? 0.024 + this.deck.length * CARD_T * 1.08 + (this.trump ? 0.02 : 0) : 0.03;
+    pos.y = base + order * 0.012;
     let a = this.seatAngle(seat);
     if (a > Math.PI) a -= Math.PI * 2;
-    return { pos, quat: faceUp(-a * 0.12 + jitter(card, this.round + 9) * 0.22), scale: 1.3 };
+    return { pos, quat: faceUp(-a * 0.12 + jitter(card, this.round + 9) * 0.22), scale: this.L.trickScale };
   }
 
   private pileBase(seat: number): THREE.Vector3 {
-    if (this.rel(seat) === 0) return new THREE.Vector3(2.0, 0, 2.95);
-    return this.dir(seat).multiplyScalar(3.95).addScaledVector(this.tangent(seat), 0.85);
+    if (this.rel(seat) === 0) return new THREE.Vector3(this.L.myPile[0], 0, this.L.myPile[1]);
+    return this.dir(seat).multiplyScalar(this.L.pileR).addScaledVector(this.tangent(seat), this.L.pileT);
   }
 
   private pileSlot(seat: number, idx: number): Transform {
@@ -203,7 +258,7 @@ export class TableView {
     const t = this.tangent(seat);
     const spacing = Math.min(0.26, 2.4 / Math.max(count, 1));
     const off = (i - (count - 1) / 2) * spacing;
-    const pos = d.clone().multiplyScalar(OPP_HAND_R).addScaledVector(t, off);
+    const pos = d.clone().multiplyScalar(this.L.oppR).addScaledVector(t, off);
     pos.y = 0.27 - Math.abs(off) * 0.03;
     // verdeckt, leicht angekippt (Rücken nach oben), damit man die Karten von jedem Platz aus sieht
     const tilt = 0.42;
@@ -215,7 +270,7 @@ export class TableView {
     q.multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -off * 0.22));
     // leicht nach vorne versetzt, damit sich die Karten nicht schneiden
     pos.addScaledVector(normal, -i * 0.004);
-    return { pos, quat: q, scale: 0.62 };
+    return { pos, quat: q, scale: this.L.oppScale };
   }
 
   /** Handkarten im Kamera-Raum (immer unten am Bildschirm). */
@@ -271,15 +326,15 @@ export class TableView {
 
   private coinSlot(seat: number): Transform {
     let pos: THREE.Vector3;
-    if (this.rel(seat) === 0) pos = new THREE.Vector3(-2.3, 0, 3.15);
-    else pos = this.dir(seat).multiplyScalar(4.55).addScaledVector(this.tangent(seat), -1.35);
+    if (this.rel(seat) === 0) pos = new THREE.Vector3(this.L.myCoin[0], 0, this.L.myCoin[1]);
+    else pos = this.dir(seat).multiplyScalar(this.L.coinR).addScaledVector(this.tangent(seat), -1.35);
     pos.y = 0.04;
     return { pos, quat: new THREE.Quaternion().setFromAxisAngle(Y_AXIS, -this.seatAngle(seat)), scale: 1 };
   }
 
   private ringPos(seat: number): THREE.Vector3 {
     if (this.rel(seat) === 0) return new THREE.Vector3(0, 0.02, 4.6);
-    const p = this.dir(seat).multiplyScalar(OPP_HAND_R - 0.1);
+    const p = this.dir(seat).multiplyScalar(this.L.oppR - 0.1);
     p.y = 0.02;
     return p;
   }

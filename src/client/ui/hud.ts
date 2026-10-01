@@ -10,6 +10,8 @@ import { icon } from './icons';
 
 export interface HudActions {
   send(msg: ClientMsg): void;
+  /** Sendet eine Chatnachricht; false, wenn gerade gesperrt (Spamschutz) */
+  chat(text: string): boolean;
   leave(): void;
   again(): void;
   openSettings(): void;
@@ -211,12 +213,14 @@ export class Hud {
       l.nm.replaceChildren(seat === view.you ? 'Du' : p.name);
       if (p.bot) l.nm.append(h('span', { class: 'bot-tag', title: p.replaced ? 'Bot spielt für den Spieler' : 'Computergegner' }, 'Bot'));
       clear(l.st);
+      const narrow = window.innerWidth < 640;
       if (!p.connected) l.st.append('getrennt …');
       else if (p.bid === null) {
-        l.st.append(view.phase === 'bidding' && view.turn === seat ? 'bietet …' : view.phase === 'trump' && view.dealer === seat ? 'wählt Trumpf …' : 'Gebot –');
+        l.st.append(view.phase === 'bidding' && view.turn === seat ? 'bietet …' : view.phase === 'trump' && view.dealer === seat ? 'wählt …' : 'Gebot –');
       } else {
         const cls = p.tricks === p.bid ? 'hit' : p.tricks > p.bid ? 'over' : '';
-        l.st.append(h('span', null, 'Gebot ', h('b', null, String(p.bid))), h('span', { class: cls }, 'Stiche ', h('b', { class: cls }, String(p.tricks))));
+        if (narrow) l.st.append(h('span', { class: cls }, 'Stiche ', h('b', { class: cls }, `${p.tricks}/${p.bid}`)));
+        else l.st.append(h('span', null, 'Gebot ', h('b', null, String(p.bid))), h('span', { class: cls }, 'Stiche ', h('b', { class: cls }, String(p.tricks))));
       }
       l.score.textContent = String(p.score);
     });
@@ -228,14 +232,23 @@ export class Hud {
     if (!v || !this.visible) return;
     const W = window.innerWidth;
     const H = window.innerHeight;
+    // Labels nie unter Infoleiste/eigenem Label verstecken
+    let minTop = 64;
+    const bar = this.root.querySelector('.topbar');
+    if (bar) minTop = bar.getBoundingClientRect().bottom + 8;
+    const meLabel = this.labels[v.you]?.root;
+    if (meLabel && W < 640) minTop = Math.max(minTop, meLabel.getBoundingClientRect().bottom + 8);
     this.labels.forEach((l, seat) => {
       if (seat === v.you) return;
       const p = this.table.seatScreen(seat);
       const w = l.root.offsetWidth;
       const hgt = l.root.offsetHeight;
-      const x = Math.max(w / 2 + 8, Math.min(W - w / 2 - 8, p.x));
-      const y = Math.max(hgt + 64, Math.min(H - 80, p.y));
+      const x = Math.max(w / 2 + 6, Math.min(W - w / 2 - 6, p.x));
+      const y = Math.max(minTop + hgt, Math.min(H - 80, p.y));
       l.root.style.transform = `translate(${x - w / 2}px, ${y - hgt}px)`;
+    });
+    this.labels.forEach((l, seat) => {
+      if (l.root.classList.contains('has-bubble')) this.layoutBubbles(seat);
     });
   }
 
@@ -409,10 +422,46 @@ export class Hud {
   private bubble(seat: number, text: string, chat = false): void {
     const l = this.labels[seat];
     if (!l) return;
-    l.root.querySelectorAll(chat ? '.bubble.chat' : '.bubble:not(.chat)').forEach((b) => b.remove());
-    const b = h('div', { class: `bubble ${chat ? 'chat' : ''}` }, text);
+    l.root.querySelectorAll(chat ? '.bubble.msg' : '.bubble:not(.msg)').forEach((b) => b.remove());
+    const b = h('div', { class: `bubble ${chat ? 'msg' : ''}` }, chat ? h('span', { class: 'txt' }, text) : text);
     l.root.appendChild(b);
-    setTimeout(() => b.remove(), chat ? 5100 : 2700);
+    this.layoutBubbles(seat);
+    setTimeout(
+      () => {
+        b.remove();
+        this.layoutBubbles(seat);
+      },
+      chat ? 5100 : 2700,
+    );
+  }
+
+  /** Blasen eines Labels stapeln und im sichtbaren Bereich halten. */
+  private layoutBubbles(seat: number): void {
+    const l = this.labels[seat];
+    const v = this.view;
+    if (!l || !v) return;
+    const bubbles = [
+      ...l.root.querySelectorAll<HTMLElement>('.bubble:not(.msg)'),
+      ...l.root.querySelectorAll<HTMLElement>('.bubble.msg'),
+    ];
+    l.root.classList.toggle('has-bubble', bubbles.length > 0);
+    if (!bubbles.length) return;
+    // eigenes Label sitzt am Handy oben → Blasen nach unten
+    l.root.classList.toggle('below', seat === v.you && window.innerWidth < 640);
+    const W = window.innerWidth;
+    const r = l.root.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    let stack = 0;
+    for (const b of bubbles) {
+      const w = b.offsetWidth;
+      const left = cx - w / 2;
+      let shift = 0;
+      if (left < 8) shift = 8 - left;
+      else if (left + w > W - 8) shift = W - 8 - (left + w);
+      b.style.setProperty('--shift', `${Math.round(shift)}px`);
+      b.style.setProperty('--stack', `${stack}px`);
+      stack += b.offsetHeight + 8;
+    }
   }
 
   // ───────────────────────── Runden- & Spielende ─────────────────────────
@@ -699,10 +748,12 @@ export class Hud {
     this.unread = false;
     this.chatBtn?.querySelector('.dot')?.remove();
     const input = h('input', { class: 'input', maxlength: 160, placeholder: 'Nachricht …', autocomplete: 'off' }) as HTMLInputElement;
-    const send = (text: string) => {
+    const send = (text: string): boolean => {
       const t = text.trim();
-      if (!t) return;
-      this.actions.send({ t: 'chat', text: t });
+      if (!t) return false;
+      const ok = this.actions.chat(t);
+      if (!ok) input.animate([{ transform: 'translateX(-5px)' }, { transform: 'translateX(5px)' }, { transform: 'none' }], { duration: 220 });
+      return ok;
     };
     const quick = h(
       'div',
@@ -711,7 +762,7 @@ export class Hud {
     );
     this.chatPanel = h(
       'div',
-      { class: 'chat panel' },
+      { class: 'chat-panel panel' },
       h('div', { class: 'chat-log' }),
       quick,
       h(
@@ -719,8 +770,7 @@ export class Hud {
         {
           onsubmit: (e: Event) => {
             e.preventDefault();
-            send(input.value);
-            input.value = '';
+            if (send(input.value)) input.value = '';
           },
         },
         input,

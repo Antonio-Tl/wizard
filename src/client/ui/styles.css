@@ -841,11 +841,12 @@ img.avatar {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 15;
+  z-index: 21;
 }
 
 .plabel {
   position: absolute;
+  z-index: 1;
   left: 0;
   top: 0;
   transform: translate(-50%, -100%);
@@ -986,47 +987,69 @@ img.avatar {
 .bubble {
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 10px);
-  transform: translateX(-50%);
+  bottom: calc(100% + 10px + var(--stack, 0px));
+  margin-left: var(--shift, 0px);
   padding: 7px 13px;
   border-radius: 12px;
   font-weight: 700;
   font-size: 14px;
+  line-height: 1.35;
+  text-align: left;
   background: linear-gradient(180deg, #fff6dc, #f0dca8);
   color: #2b1d08;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
   animation: bubble 2.6s ease both;
   white-space: nowrap;
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  width: max-content;
+  max-width: 240px;
+  pointer-events: none;
+  transition:
+    bottom 0.25s ease,
+    top 0.25s ease;
 }
 
 .bubble::after {
   content: '';
   position: absolute;
-  left: 50%;
+  left: calc(50% - var(--shift, 0px));
   top: 100%;
   transform: translateX(-50%);
   border: 7px solid transparent;
   border-top-color: #f0dca8;
 }
 
-.bubble.chat {
+/* Chat-Nachricht: mehrzeilig, höchstens drei Zeilen */
+.bubble.msg {
   font-weight: 500;
+  font-size: 13.5px;
   white-space: normal;
-  width: max-content;
-  max-width: 220px;
+  max-width: 230px;
   animation-duration: 5s;
 }
 
-.plabel.me .bubble {
-  left: 20px;
-  transform: none;
+.bubble.msg .txt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
-.plabel.me .bubble::after {
-  left: 26px;
+.plabel.has-bubble {
+  z-index: 5;
+}
+
+/* Blasen unterhalb des Labels (eigenes Label oben am Handy) */
+.plabel.below .bubble {
+  bottom: auto;
+  top: calc(100% + 10px + var(--stack, 0px));
+}
+
+.plabel.below .bubble::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #fff6dc;
 }
 
 @keyframes bubble {
@@ -1047,30 +1070,6 @@ img.avatar {
   100% {
     opacity: 0;
     transform: translateX(-50%) translateY(-6px);
-  }
-}
-
-.plabel.me .bubble {
-  animation-name: bubbleMe;
-}
-
-@keyframes bubbleMe {
-  0% {
-    opacity: 0;
-    transform: translateY(8px) scale(0.8);
-  }
-  8% {
-    opacity: 1;
-    transform: scale(1.06);
-  }
-  14% {
-    transform: scale(1);
-  }
-  85% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
   }
 }
 
@@ -1591,7 +1590,7 @@ table.scores tfoot td {
 }
 
 /* Chat */
-.chat {
+.chat-panel {
   position: absolute;
   right: 12px;
   top: calc(max(12px, var(--safe-t)) + 56px);
@@ -1623,14 +1622,14 @@ table.scores tfoot td {
   font-style: italic;
 }
 
-.chat form {
+.chat-panel form {
   display: flex;
   gap: 6px;
   padding: 8px;
   border-top: 1px solid rgba(230, 192, 106, 0.15);
 }
 
-.chat .input {
+.chat-panel .input {
   height: 38px;
   font-size: 14px;
 }
@@ -1802,22 +1801,133 @@ table.scores tfoot td {
 
 
 @media (max-width: 640px) {
+  /* eigenes Label oben links neben der Werkzeugleiste */
   .plabel.me {
-    top: calc(max(12px, var(--safe-t)) + 62px);
+    top: max(10px, var(--safe-t));
     bottom: auto;
-    left: auto;
-    right: 12px;
+    left: 10px;
+    right: auto;
   }
-  .plabel.me .bubble,
   .plabel.me .delta {
     bottom: auto;
     top: calc(100% + 10px);
   }
-  .plabel.me .bubble::after {
-    top: auto;
-    bottom: 100%;
-    border-top-color: transparent;
-    border-bottom-color: #fff6dc;
+  .topbar {
+    top: max(10px, var(--safe-t));
+    left: 10px;
+    right: 10px;
+    gap: 7px;
+  }
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+  .icon-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+  .tools {
+    gap: 4px;
+  }
+  .info-cell {
+    padding: 6px 10px;
+  }
+  .info-k {
+    font-size: 9px;
+  }
+  .info-v {
+    font-size: 14px;
+  }
+  .trump-cell {
+    gap: 8px;
+  }
+  .trump-cell img,
+  .trump-none {
+    width: 22px;
+    height: 34px;
+  }
+  /* kompakte Spieler-Labels */
+  .plabel {
+    padding: 3px 9px 3px 3px;
+    gap: 6px;
+  }
+  .plabel .av {
+    width: 30px;
+    height: 30px;
+  }
+  .plabel .dealer {
+    width: 15px;
+    height: 15px;
+    font-size: 8.5px;
+  }
+  .plabel .nm {
+    font-size: 12px;
+    max-width: 74px;
+  }
+  .plabel .st {
+    font-size: 10.5px;
+  }
+  .plabel .score {
+    font-size: 13px;
+    padding-left: 7px;
+  }
+  .plabel .bot-tag {
+    display: none;
+  }
+  /* Gegner im Hochformat: schmale, senkrechte Plaketten am Rand */
+  .plabel:not(.me) {
+    flex-direction: column;
+    gap: 1px;
+    width: 76px;
+    padding: 5px 4px 6px;
+    border-radius: 16px;
+    text-align: center;
+  }
+  .plabel:not(.me) .av {
+    width: 34px;
+    height: 34px;
+  }
+  .plabel:not(.me) .meta {
+    align-items: center;
+    max-width: 100%;
+  }
+  .plabel:not(.me) .nm {
+    max-width: 68px;
+    font-size: 11.5px;
+  }
+  .plabel:not(.me) .st {
+    font-size: 10px;
+    justify-content: center;
+  }
+  .plabel:not(.me) .score {
+    border-left: none;
+    padding: 0;
+    margin: 1px 0 0;
+    font-size: 12.5px;
+    line-height: 1;
+  }
+  .bubble {
+    font-size: 12.5px;
+    padding: 5px 10px;
+  }
+  /* Aktionsfelder kompakter */
+  .action {
+    padding: 12px 12px 10px;
+  }
+  .action h3 {
+    font-size: 14.5px;
+  }
+  .action .sub {
+    font-size: 11.5px;
+    margin-bottom: 9px;
+  }
+  .prompt {
+    font-size: 13px;
+    padding: 7px 14px;
+  }
+  #toasts {
+    top: calc(max(10px, var(--safe-t)) + 98px);
   }
 }
 

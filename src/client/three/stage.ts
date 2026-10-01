@@ -128,7 +128,7 @@ export class Stage {
   // ───────────────────────── Aufbau ─────────────────────────
 
   private buildTable(): void {
-    const felt = feltTextures(this.quality === 'high' ? 2048 : 1024);
+    const felt = feltTextures(this.quality === 'low' ? 1024 : 2048);
     const feltMat = new THREE.MeshStandardMaterial({
       map: felt.map,
       normalMap: felt.normal,
@@ -206,7 +206,7 @@ export class Stage {
 
   private buildMagicCircle(): THREE.Mesh {
     const mat = new THREE.MeshBasicMaterial({
-      map: magicCircleTexture(this.quality === 'high' ? 2048 : 1024),
+      map: magicCircleTexture(this.quality === 'low' ? 1024 : 2048),
       transparent: true,
       opacity: 0.16,
       blending: THREE.AdditiveBlending,
@@ -307,16 +307,17 @@ export class Stage {
   private seatDistance(): number {
     const aspect = this.camera.aspect;
     const tanH = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * aspect;
-    // im Hochformat darf die Holzkante seitlich leicht angeschnitten sein
-    const fitHalfWidth = aspect < 1 ? 6.1 : 8.4;
-    return Math.max(15.2, fitHalfWidth / tanH);
+    // Hochformat (Handy): auf die Tischmitte zoomen, der Rand darf angeschnitten sein
+    // Tablet im Hochformat etwas weiter weg, damit die breiteren Labels neben die Stichkarten passen
+    if (aspect < 0.8) return (window.innerWidth >= 640 ? 5.6 : 4.5) / tanH;
+    return Math.max(15.2, 8.4 / tanH);
   }
 
   seatCameraPose(): { pos: THREE.Vector3; target: THREE.Vector3 } {
     const aspect = this.camera.aspect;
     const d = this.seatDistance();
-    const elev = aspect < 1 ? 1.12 : aspect < 1.4 ? 0.98 : 0.9;
-    const target = new THREE.Vector3(0, 0, aspect < 1 ? 2.2 : 0.85);
+    const elev = aspect < 0.8 ? 1.2 : aspect < 1.4 ? 0.98 : 0.9;
+    const target = new THREE.Vector3(0, 0, aspect < 0.8 ? 1.15 : 0.85);
     const pos = new THREE.Vector3(0, Math.sin(elev) * d, Math.cos(elev) * d).add(new THREE.Vector3(0, 0, target.z));
     return { pos, target };
   }
@@ -384,7 +385,7 @@ export class Stage {
   private resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const maxDpr = this.quality === 'high' ? 2 : this.quality === 'medium' ? 1.5 : 1;
+    const maxDpr = this.quality === 'low' ? 1 : 2;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, maxDpr));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
@@ -410,9 +411,12 @@ export class Stage {
     this.tweens.update(now);
     this.updateCamera(dt);
 
-    // Magielichter
+    // Magielichter (im Hochformat-Spiel nur als Licht, die Kugeln lägen sonst über dem Tisch)
     const t = now / 1000;
+    const hideOrbs = this.camMode === 'seat' && this.camera.aspect < 0.8;
     for (const o of this.orbs) {
+      o.sprite.visible = !hideOrbs;
+      for (const c of o.group.children) if (c !== o.light) c.visible = !hideOrbs;
       const a = o.phase + t * o.speed * 2;
       o.group.position.set(Math.cos(a) * o.radius, o.height + Math.sin(t * 0.9 + o.phase) * 0.45, Math.sin(a) * o.radius * 0.45 - 4.2);
       const flicker = 1 + Math.sin(t * 7.3 + o.phase * 5) * 0.06 + Math.sin(t * 13.1 + o.phase) * 0.04;

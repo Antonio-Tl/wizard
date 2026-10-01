@@ -268,7 +268,7 @@ export interface ChatEntry {
   sys?: boolean;
 }
 
-function lobbyChat(log: ChatEntry[], send: (msg: ClientMsg) => void): HTMLElement {
+function lobbyChat(log: ChatEntry[], chat: (text: string) => boolean): HTMLElement {
   const input = h('input', { class: 'input', maxlength: 160, placeholder: 'Nachricht an alle …', autocomplete: 'off' }) as HTMLInputElement;
   const list = h('div', { class: 'lobby-chat-log' });
   renderChatEntries(list, log);
@@ -282,8 +282,9 @@ function lobbyChat(log: ChatEntry[], send: (msg: ClientMsg) => void): HTMLElemen
         onsubmit: (e: Event) => {
           e.preventDefault();
           const t = input.value.trim();
-          if (t) send({ t: 'chat', text: t });
-          input.value = '';
+          if (!t) return;
+          if (chat(t)) input.value = '';
+          else input.animate([{ transform: 'translateX(-5px)' }, { transform: 'translateX(5px)' }, { transform: 'none' }], { duration: 220 });
         },
       },
       input,
@@ -304,7 +305,13 @@ export function updateLobbyChat(log: ChatEntry[]): void {
   if (list) renderChatEntries(list, log);
 }
 
-export function renderLobby(view: View, send: (msg: ClientMsg) => void, leave: () => void, chatLog: ChatEntry[] = []): void {
+export function renderLobby(
+  view: View,
+  send: (msg: ClientMsg) => void,
+  leave: () => void,
+  chatLog: ChatEntry[] = [],
+  chat: (text: string) => boolean = (text) => (send({ t: 'chat', text }), true),
+): void {
   let el = screens().querySelector('.screen.lobby-screen') as HTMLElement | null;
   if (!el) {
     clearScreens();
@@ -383,7 +390,7 @@ export function renderLobby(view: View, send: (msg: ClientMsg) => void, leave: (
       ),
       seats,
       optionFields(view.options, (o) => send({ t: 'options', options: o }), !isHost, true),
-      lobbyChat(chatLog, send),
+      lobbyChat(chatLog, chat),
       h(
         'div',
         { class: 'modal-actions', style: 'margin-top:0' },
