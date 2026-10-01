@@ -130,3 +130,43 @@ export type ServerMsg =
 
 /** Anzahl der wählbaren Avatar-Medaillons */
 export const AVATAR_COUNT = 12;
+
+// ───────────────────────── Statistik (Admin-Seite) ─────────────────────────
+
+export type GameMode = 'online' | 'solo';
+
+/** Beginn und Ende eines Spiels, gemeldet vom Spielraum */
+export type StatsEvent =
+  | {
+      type: 'start';
+      id: string;
+      mode: GameMode;
+      players: number;
+      /** Namen der menschlichen Spieler */
+      humans: string[];
+      rounds: number;
+      roundsMode: GameOptions['roundsMode'];
+      room: string | null;
+    }
+  | { type: 'end'; id: string; mode: GameMode; winner: string; winnerBot: boolean };
+
+export interface StatsGame {
+  id: string;
+  mode: GameMode;
+  startedAt: number;
+  endedAt: number | null;
+  players: number;
+  humans: string[];
+  rounds: number;
+  roundsMode: GameOptions['roundsMode'];
+  room: string | null;
+  winner: string | null;
+  winnerBot: boolean;
+}
+
+export interface StatsResponse {
+  /** Anzahl aller gespeicherten Spiele (die Liste kann gekürzt sein) */
+  total: number;
+  games: StatsGame[];
+  now: number;
+}

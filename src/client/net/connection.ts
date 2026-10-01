@@ -1,5 +1,5 @@
 import { RoomCore, type RoomData, createRoomData } from '../../shared/room';
-import type { ClientMsg, Difficulty, GameOptions, ServerMsg } from '../../shared/types';
+import type { ClientMsg, Difficulty, GameOptions, ServerMsg, StatsEvent } from '../../shared/types';
 
 export type ConnStatus = 'connecting' | 'open' | 'reconnecting' | 'closed';
 
@@ -69,6 +69,7 @@ export class LocalConnection implements Connection {
           this.core.tick();
         }, Math.max(0, at - Date.now()));
       },
+      stats: reportStats,
     });
     queueMicrotask(() => {
       this.onStatus('open');
@@ -114,6 +115,16 @@ export class LocalConnection implements Connection {
     this.closed = true;
     if (this.timer) clearTimeout(this.timer);
   }
+}
+
+/** Meldet Beginn und Ende eines Einzelspieler-Spiels für die Statistik (ohne Server egal). */
+function reportStats(ev: StatsEvent): void {
+  fetch('/api/stats', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(ev),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 /** Multiplayer über WebSocket zum Durable Object. */

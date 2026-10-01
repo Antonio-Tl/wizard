@@ -6,4 +6,14 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1500,
   },
+  environments: {
+    client: {
+      build: {
+        rolldownOptions: {
+          // admin.html wird unter /admin ausgeliefert
+          input: { main: 'index.html', admin: 'admin.html' },
+        },
+      },
+    },
+  },
 });

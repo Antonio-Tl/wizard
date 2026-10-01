@@ -1,10 +1,14 @@
 import { DurableObject } from 'cloudflare:workers';
-import { RoomCore, type RoomData, createRoomData } from '../shared/room';
-import type { ClientMsg, ServerMsg } from '../shared/types';
+import { RoomCore, type RoomData, createRoomData, sanitizeName, sanitizeOptions } from '../shared/room';
+import { MAX_PLAYERS, MIN_PLAYERS, totalRoundsFor } from '../shared/rules';
+import type { ClientMsg, GameMode, ServerMsg, StatsEvent, StatsGame, StatsResponse } from '../shared/types';
 
 export interface Env {
   ROOMS: DurableObjectNamespace<GameRoom>;
+  STATS: DurableObjectNamespace<GameStats>;
   ASSETS: Fetcher;
+  /** Passwort für die Admin-Seite /admin (online per `wrangler secret put`, lokal in .dev.vars) */
+  ADMIN_PASSWORD?: string;
 }
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -22,6 +26,61 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
   });
+}
+
+/** Es gibt genau ein Statistik-Objekt für alle Spiele. */
+function statsStub(env: Env): DurableObjectStub<GameStats> {
+  return env.STATS.get(env.STATS.idFromName('global'));
+}
+
+async function readJson(request: Request): Promise<unknown> {
+  const text = await request.text();
+  if (text.length > 2000) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Einzelspieler-Spiele laufen im Browser und melden sich selbst. Die Angaben werden
+ * deshalb streng geprüft und dürfen nur Einzelspieler-Einträge anlegen oder beenden.
+ */
+function parseSoloStats(raw: unknown): StatsEvent | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== 'string' || !/^[0-9a-f]{24}$/.test(o.id)) return null;
+  if (o.type === 'start') {
+    const players = Number(o.players);
+    if (!Number.isInteger(players) || players < MIN_PLAYERS || players > MAX_PLAYERS) return null;
+    const { roundsMode } = sanitizeOptions({ roundsMode: o.roundsMode as never });
+    const humans = Array.isArray(o.humans) ? o.humans.slice(0, 1).map(sanitizeName) : [];
+    return { type: 'start', id: o.id, mode: 'solo', players, humans, rounds: totalRoundsFor(players, roundsMode), roundsMode, room: null };
+  }
+  if (o.type === 'end') return { type: 'end', id: o.id, mode: 'solo', winner: sanitizeName(o.winner), winnerBot: o.winnerBot === true };
+  return null;
+}
+
+/** Prüft das Admin-Passwort aus dem Authorization-Header. Gibt bei Erfolg null zurück. */
+async function checkAdmin(request: Request, env: Env): Promise<Response | null> {
+  if (!env.ADMIN_PASSWORD) return json({ error: 'no_password' }, 503);
+  let given = '';
+  try {
+    given = decodeURIComponent(request.headers.get('Authorization')?.replace(/^Bearer /, '') ?? '');
+  } catch {
+    given = '';
+  }
+  if (given && (await sameSecret(given, env.ADMIN_PASSWORD))) return null;
+  // kleine Bremse gegen Durchprobieren
+  await new Promise((r) => setTimeout(r, 700));
+  return json({ error: 'unauthorized' }, 401);
+}
+
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [ha, hb] = await Promise.all([crypto.subtle.digest('SHA-256', enc.encode(a)), crypto.subtle.digest('SHA-256', enc.encode(b))]);
+  return crypto.subtle.timingSafeEqual(ha, hb);
 }
 
 export default {
@@ -56,6 +115,20 @@ export default {
       return stub.fetch(request);
     }
 
+    if (url.pathname === '/api/stats' && request.method === 'POST') {
+      const ev = parseSoloStats(await readJson(request));
+      if (ev) await statsStub(env).record(ev);
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.pathname === '/api/admin/stats') {
+      const denied = await checkAdmin(request, env);
+      if (denied) return denied;
+      if (request.method === 'GET') return json(await statsStub(env).list());
+      if (request.method === 'DELETE') return json({ deleted: await statsStub(env).clear() });
+      return json({ error: 'Methode nicht erlaubt' }, 405);
+    }
+
     if (url.pathname.startsWith('/api/')) return json({ error: 'Nicht gefunden' }, 404);
     return env.ASSETS.fetch(request);
   },
@@ -72,6 +145,7 @@ interface SocketAttachment {
 export class GameRoom extends DurableObject<Env> {
   private data: RoomData | null = null;
   private core: RoomCore | null = null;
+  private pendingStats: StatsEvent[] = [];
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -86,6 +160,7 @@ export class GameRoom extends DurableObject<Env> {
       now: () => Date.now(),
       send: (token, msg) => this.sendTo(token, msg),
       schedule: (at) => this.scheduleAt(at),
+      stats: (ev) => this.pendingStats.push(ev),
     });
   }
 
@@ -217,5 +292,117 @@ export class GameRoom extends DurableObject<Env> {
       this.pendingAlarm = undefined;
       if (at !== null) await this.ctx.storage.setAlarm(Math.max(at, Date.now() + 10));
     }
+    for (const ev of this.pendingStats.splice(0)) {
+      try {
+        await statsStub(this.env).record(ev);
+      } catch (err) {
+        console.error('stats failed', err);
+      }
+    }
+  }
+}
+
+/** Höchstens so viele Spiele werden aufbewahrt, die ältesten fallen heraus. */
+const MAX_STORED_GAMES = 50_000;
+/** So viele Spiele bekommt die Admin-Seite höchstens auf einmal. */
+const LIST_LIMIT = 20_000;
+
+type GameRow = {
+  id: string;
+  mode: string;
+  started_at: number;
+  ended_at: number | null;
+  players: number;
+  humans: string;
+  rounds: number;
+  rounds_mode: string;
+  room: string | null;
+  winner: string | null;
+  winner_bot: number;
+};
+
+/**
+ * Statistik für die Admin-Seite: ein einziges Objekt mit einer SQLite-Tabelle
+ * aller gestarteten Spiele (online und gegen Bots).
+ */
+export class GameStats extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.storage.sql.exec(`CREATE TABLE IF NOT EXISTS games (
+      id TEXT PRIMARY KEY,
+      mode TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      players INTEGER NOT NULL,
+      humans TEXT NOT NULL,
+      rounds INTEGER NOT NULL,
+      rounds_mode TEXT NOT NULL,
+      room TEXT,
+      winner TEXT,
+      winner_bot INTEGER NOT NULL DEFAULT 0
+    )`);
+    ctx.storage.sql.exec('CREATE INDEX IF NOT EXISTS games_started ON games (started_at)');
+  }
+
+  async record(ev: StatsEvent): Promise<void> {
+    const sql = this.ctx.storage.sql;
+    const now = Date.now();
+    if (ev.type === 'start') {
+      sql.exec(
+        'INSERT OR IGNORE INTO games (id, mode, started_at, players, humans, rounds, rounds_mode, room) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        ev.id,
+        ev.mode,
+        now,
+        ev.players,
+        JSON.stringify(ev.humans),
+        ev.rounds,
+        ev.roundsMode,
+        ev.room,
+      );
+      sql.exec(
+        'DELETE FROM games WHERE started_at < (SELECT started_at FROM games ORDER BY started_at DESC LIMIT 1 OFFSET ?)',
+        MAX_STORED_GAMES - 1,
+      );
+    } else {
+      sql.exec(
+        'UPDATE games SET ended_at = ?, winner = ?, winner_bot = ? WHERE id = ? AND mode = ? AND ended_at IS NULL',
+        now,
+        ev.winner,
+        ev.winnerBot ? 1 : 0,
+        ev.id,
+        ev.mode,
+      );
+    }
+  }
+
+  async list(): Promise<StatsResponse> {
+    const sql = this.ctx.storage.sql;
+    const total = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM games').one().n;
+    const games = sql
+      .exec<GameRow>('SELECT * FROM games ORDER BY started_at DESC LIMIT ?', LIST_LIMIT)
+      .toArray()
+      .map(
+        (r): StatsGame => ({
+          id: r.id,
+          mode: r.mode as GameMode,
+          startedAt: r.started_at,
+          endedAt: r.ended_at,
+          players: r.players,
+          humans: JSON.parse(r.humans) as string[],
+          rounds: r.rounds,
+          roundsMode: sanitizeOptions({ roundsMode: r.rounds_mode as never }).roundsMode,
+          room: r.room,
+          winner: r.winner,
+          winnerBot: r.winner_bot === 1,
+        }),
+      );
+    return { total, games, now: Date.now() };
+  }
+
+  async clear(): Promise<number> {
+    const sql = this.ctx.storage.sql;
+    const n = sql.exec<{ n: number }>('SELECT COUNT(*) AS n FROM games').one().n;
+    sql.exec('DELETE FROM games');
+    return n;
   }
 }

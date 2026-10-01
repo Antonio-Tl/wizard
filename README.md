@@ -87,6 +87,28 @@ Danach erneut `npm run deploy` ausführen. Das funktioniert genauso mit der Haup
 
 Workers und Durable Objects (mit SQLite-Speicher) sind im kostenlosen Plan enthalten. Ruhende Räume kosten dank WebSocket-Hibernation nichts, und leere Räume löschen sich nach zwei Stunden ohne Aktivität selbst. Für eine private Spielrunde reicht das Gratis-Kontingent locker.
 
+## Admin-Seite
+
+Unter `/admin` gibt es ein verstecktes Dashboard (nirgends verlinkt, für Suchmaschinen gesperrt). Es zeigt, wie viele Spiele wann gespielt wurden: Spiele pro Tag bzw. Woche, eine Heatmap nach Wochentag und Uhrzeit, Spielarten, Stammgäste und eine Liste der letzten Spiele. Ein Button löscht die komplette Statistik.
+
+Erfasst werden Online-Spiele (vom Server) und Spiele gegen Bots (der Browser meldet Start und Ende). Gespeichert wird in einem eigenen Durable Object `GameStats` mit SQLite.
+
+Die Seite ist mit einem Passwort geschützt:
+
+- **Online:** einmalig setzen, danach ist es sofort aktiv:
+
+  ```bash
+  npx wrangler secret put ADMIN_PASSWORD
+  ```
+
+- **Lokal:** in die Datei `.dev.vars` schreiben (wird nicht eingecheckt) und den Dev-Server neu starten:
+
+  ```
+  ADMIN_PASSWORD=dein-langes-passwort
+  ```
+
+Ohne gesetztes Passwort zeigt `/admin` nur einen Hinweis, wie man es einrichtet.
+
 ## Spielregeln (Kurzfassung)
 
 - 60 Karten: Zahlen 1–13 in vier Farben sowie je 4 Zauberer und 4 Narren.

@@ -10,6 +10,7 @@ import {
   type GameState,
   type PlayerPublic,
   type ServerMsg,
+  type StatsEvent,
   type View,
 } from './types';
 
@@ -45,6 +46,8 @@ export interface RoomData {
   readyAt: number;
   roundEndAt: number | null;
   lastActive: number;
+  /** Kennung des laufenden Spiels für die Statistik */
+  statsId?: string | null;
 }
 
 export interface RoomHooks {
@@ -52,6 +55,8 @@ export interface RoomHooks {
   now(): number;
   /** Wunsch, `tick()` zum Zeitpunkt `at` aufzurufen (null = kein Termin nötig) */
   schedule(at: number | null): void;
+  /** Spielbeginn und -ende für die Admin-Statistik */
+  stats?(ev: StatsEvent): void;
 }
 
 const BOT_NAMES = [
@@ -292,8 +297,33 @@ export class RoomCore {
     }
     const n = d.players.length;
     d.game = newGame(n, d.options, Math.floor(Math.random() * n));
+    d.statsId = randomId();
+    this.hooks.stats?.({
+      type: 'start',
+      id: d.statsId,
+      mode: d.code ? 'online' : 'solo',
+      players: n,
+      humans: d.players.filter((p) => !p.bot).map((p) => p.name),
+      rounds: d.game.totalRounds,
+      roundsMode: d.options.roundsMode,
+      room: d.code,
+    });
     const events = startRound(d.game);
     this.apply(events);
+  }
+
+  private reportEnd(ranking: number[]): void {
+    const d = this.data;
+    const winner = d.players[ranking[0]];
+    if (!d.statsId || !winner) return;
+    this.hooks.stats?.({
+      type: 'end',
+      id: d.statsId,
+      mode: d.code ? 'online' : 'solo',
+      winner: winner.name,
+      winnerBot: !!winner.bot && !winner.replaced,
+    });
+    d.statsId = null;
   }
 
   private nextRound(): void {
@@ -342,6 +372,7 @@ export class RoomCore {
       if (ev.e === 'trump') delay += 900;
       if (ev.e === 'trickWon') delay += 1500;
       if (ev.e === 'roundEnd') this.data.roundEndAt = now;
+      if (ev.e === 'gameEnd') this.reportEnd(ev.ranking);
     }
     this.data.readyAt = now + delay;
     if (g && g.phase !== 'roundEnd' && g.phase !== 'gameEnd') {
@@ -473,6 +504,11 @@ export class RoomCore {
     }
     return name;
   }
+}
+
+function randomId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function clampAvatar(a: unknown): number {
