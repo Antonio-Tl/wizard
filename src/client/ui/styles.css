@@ -433,10 +433,6 @@ h3 {
   background: none;
   border: none;
   position: relative;
-  transition:
-    transform 0.18s ease,
-    filter 0.2s ease;
-  filter: saturate(0.7) brightness(0.78);
 }
 
 .avatars button img {
@@ -445,14 +441,26 @@ h3 {
   height: 100%;
 }
 
-.avatars button:hover {
-  transform: translateY(-2px);
-  filter: none;
+/* Abdunkeln per Ebene statt CSS-Filter (Filter machen Bilder in Safari unscharf) */
+.avatars button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 50%;
+  background: rgba(8, 5, 18, 0.34);
+  transition: opacity 0.2s ease;
+  pointer-events: none;
 }
 
-.avatars button.on {
-  filter: none;
-  transform: scale(1.06);
+.avatars button.on::before {
+  opacity: 0;
+}
+
+@media (hover: hover) {
+  .avatars button:hover::before {
+    opacity: 0;
+  }
 }
 
 .avatars button.on::after {
@@ -894,7 +902,7 @@ img.avatar {
   height: 40px;
   border-radius: 50%;
   flex: none;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .plabel.turn .av {
@@ -1545,7 +1553,8 @@ table.scores tfoot td {
   width: 64px;
   height: 64px;
   margin: 0 auto;
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
+  border-radius: 50%;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
 }
 
 .pod .nm {

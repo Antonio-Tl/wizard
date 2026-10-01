@@ -203,7 +203,9 @@ function svgFor(def: AvatarDef): string {
     const a = (i / 24) * Math.PI * 2;
     return `<circle cx="${(50 + Math.cos(a) * 44.6).toFixed(2)}" cy="${(50 + Math.sin(a) * 44.6).toFixed(2)}" r=".95"/>`;
   }).join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  // feste Eigengröße + keine SVG-Filter: Safari rendert sonst unscharf
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256">
+  <style>.sh *{fill:#000!important;stroke:#000!important}</style>
   <defs>
     <radialGradient id="bg" cx="42%" cy="34%" r="72%">
       <stop offset="0" stop-color="${def.light}"/>
@@ -229,14 +231,13 @@ function svgFor(def: AvatarDef): string {
       <stop offset=".5" stop-color="#b8862b"/>
       <stop offset="1" stop-color="#e9c46a"/>
     </linearGradient>
-    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="1.4" stdDeviation="1.1" flood-color="#000" flood-opacity=".55"/>
-    </filter>
   </defs>
   <circle cx="50" cy="50" r="48" fill="url(#bg)"/>
   <circle cx="50" cy="50" r="48" fill="url(#vig)"/>
   <ellipse cx="50" cy="27" rx="27" ry="13" fill="#fff" opacity=".06"/>
-  <g fill="url(#au)" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round" filter="url(#sh)" transform="translate(50 50.5) scale(1.13) translate(-50 -50.5)">${def.glyph(def.dark)}</g>
+  <g class="sh" stroke-width="1.4" stroke-linejoin="round" opacity=".28" transform="translate(50 52.6) scale(1.13) translate(-50 -50.5)">${def.glyph(def.dark)}</g>
+  <g class="sh" stroke-width="1.4" stroke-linejoin="round" opacity=".3" transform="translate(50 51.6) scale(1.13) translate(-50 -50.5)">${def.glyph(def.dark)}</g>
+  <g fill="url(#au)" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round" transform="translate(50 50.5) scale(1.13) translate(-50 -50.5)">${def.glyph(def.dark)}</g>
   <circle cx="50" cy="50" r="47.6" fill="none" stroke="url(#rim)" stroke-width="3.6"/>
   <circle cx="50" cy="50" r="41.6" fill="none" stroke="url(#rim)" stroke-width=".8" opacity=".55"/>
   <g fill="#e6c06a" opacity=".75">${beads}</g>
