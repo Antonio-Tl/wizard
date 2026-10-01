@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wizard",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-25",
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "GameRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom"] }],
+  "observability": { "enabled": true }
+
+  // Eigene Domain: Kommentar entfernen und Domain eintragen (Domain muss bei Cloudflare liegen)
+  // ,"routes": [{ "pattern": "wizard.deine-domain.de", "custom_domain": true }]
+}
