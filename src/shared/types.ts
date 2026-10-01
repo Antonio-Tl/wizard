@@ -128,4 +128,5 @@ export type ServerMsg =
   | { t: 'chat'; seat: number; name: string; text: string }
   | { t: 'pong' };
 
-export const AVATARS = ['🧙', '🧝', '🧔', '🦉', '🐉', '🦊', '👑', '🔮', '🧛', '🧚', '🐺', '🍄'];
+/** Anzahl der wählbaren Avatar-Medaillons */
+export const AVATAR_COUNT = 12;

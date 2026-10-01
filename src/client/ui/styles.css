@@ -245,6 +245,11 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.icon-btn svg {
+  display: block;
+  color: var(--gold-hi);
+}
+
 .icon-btn .dot {
   position: absolute;
   top: 6px;
@@ -417,31 +422,62 @@ h3 {
 .avatars {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
+  gap: 10px;
 }
 
 .avatars button {
   aspect-ratio: 1;
   min-width: 0;
   padding: 0;
-  font-size: 24px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid transparent;
+  border-radius: 50%;
+  background: none;
+  border: none;
+  position: relative;
   transition:
-    transform 0.15s,
-    border-color 0.2s,
-    background 0.2s;
+    transform 0.18s ease,
+    filter 0.2s ease;
+  filter: saturate(0.7) brightness(0.78);
+}
+
+.avatars button img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .avatars button:hover {
-  transform: scale(1.08);
+  transform: translateY(-2px);
+  filter: none;
 }
 
 .avatars button.on {
-  border-color: var(--gold);
-  background: rgba(230, 192, 106, 0.16);
-  box-shadow: 0 0 16px rgba(230, 192, 106, 0.25);
+  filter: none;
+  transform: scale(1.06);
+}
+
+.avatars button.on::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--gold-hi);
+  box-shadow: 0 0 18px rgba(230, 192, 106, 0.45);
+}
+
+.avatar-name {
+  margin-left: 8px;
+  color: var(--gold-hi);
+  letter-spacing: 0.08em;
+  text-transform: none;
+  font-family: var(--display);
+  font-size: 13px;
+}
+
+img.avatar {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
 }
 
 .menu-actions {
@@ -538,12 +574,6 @@ h3 {
 .seat .av {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  background: radial-gradient(circle at 35% 30%, #3a2c6e, #1a1238);
-  border: 1px solid rgba(230, 192, 106, 0.4);
   flex: none;
 }
 
@@ -859,15 +889,11 @@ h3 {
 
 .plabel .av {
   position: relative;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 21px;
-  background: radial-gradient(circle at 35% 30%, #3e2f78, #1a1238);
-  border: 1.5px solid rgba(230, 192, 106, 0.55);
   flex: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
 .plabel.turn .av {
@@ -909,6 +935,21 @@ h3 {
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.bot-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  vertical-align: 2px;
+  color: var(--ink-dim);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .plabel .st {
@@ -1341,8 +1382,10 @@ table.scores thead th {
 }
 
 table.scores thead th .av {
-  font-size: 20px;
   display: block;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto 4px;
 }
 
 table.scores td:first-child,
@@ -1412,7 +1455,8 @@ table.scores tfoot td {
 }
 
 .rr .av {
-  font-size: 22px;
+  width: 28px;
+  height: 28px;
 }
 
 .rr .nm {
@@ -1499,7 +1543,9 @@ table.scores tfoot td {
 }
 
 .pod .av {
-  font-size: 40px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.6));
 }
 
@@ -1597,15 +1643,18 @@ table.scores tfoot td {
 }
 
 .quick button {
-  font-size: 18px;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  font-size: 12.5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 99px;
+  color: var(--ink-dim);
   background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(230, 192, 106, 0.15);
 }
 
 .quick button:hover {
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .conn {
@@ -1682,9 +1731,8 @@ table.scores tfoot td {
     gap: 6px;
   }
   .plabel .av {
-    width: 30px;
-    height: 30px;
-    font-size: 17px;
+    width: 32px;
+    height: 32px;
   }
   .plabel .nm {
     font-size: 12px;
@@ -1733,13 +1781,9 @@ table.scores tfoot td {
   .field {
     margin-bottom: 12px;
   }
-  .avatars button {
-    font-size: 20px;
-    aspect-ratio: auto;
-    height: 40px;
-  }
   .avatars {
-    gap: 5px;
+    gap: 8px;
+    padding: 0 18px;
   }
   .menu-actions {
     margin-top: 14px;

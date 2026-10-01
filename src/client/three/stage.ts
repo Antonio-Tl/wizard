@@ -73,7 +73,7 @@ export class Stage {
     this.renderer.toneMappingExposure = 0.98;
     this.renderer.shadowMap.enabled = quality !== 'low';
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    setAnisotropy(Math.min(8, this.renderer.capabilities.getMaxAnisotropy()));
+    setAnisotropy(Math.min(16, this.renderer.capabilities.getMaxAnisotropy()));
 
     this.camera = new THREE.PerspectiveCamera(40, 1, 0.1, 120);
     this.camera.position.set(0, 14, 14);
@@ -128,7 +128,7 @@ export class Stage {
   // ───────────────────────── Aufbau ─────────────────────────
 
   private buildTable(): void {
-    const felt = feltTextures();
+    const felt = feltTextures(this.quality === 'high' ? 2048 : 1024);
     const feltMat = new THREE.MeshStandardMaterial({
       map: felt.map,
       normalMap: felt.normal,
@@ -168,7 +168,8 @@ export class Stage {
       [R + 0.7, -0.32],
       [R + 0.6, -0.36],
     ];
-    for (const [x, y] of profile) pts.push(new THREE.Vector2(x, y));
+    // Reihenfolge außen → innen, damit die Flächen nach oben/außen zeigen (sonst wird die Oberseite ausgeblendet)
+    for (const [x, y] of profile.slice().reverse()) pts.push(new THREE.Vector2(x, y));
     const rim = new THREE.Mesh(new THREE.LatheGeometry(pts, 160), woodMat);
     rim.castShadow = true;
     rim.receiveShadow = true;
@@ -205,7 +206,7 @@ export class Stage {
 
   private buildMagicCircle(): THREE.Mesh {
     const mat = new THREE.MeshBasicMaterial({
-      map: magicCircleTexture(),
+      map: magicCircleTexture(this.quality === 'high' ? 2048 : 1024),
       transparent: true,
       opacity: 0.16,
       blending: THREE.AdditiveBlending,
@@ -338,10 +339,12 @@ export class Stage {
       this.camera.updateProjectionMatrix();
     }
     if (this.camMode === 'orbit') {
-      this.orbitAngle += dt * 0.05;
-      const d = 15.5;
-      pos = new THREE.Vector3(Math.sin(this.orbitAngle) * d, 10.5, Math.cos(this.orbitAngle) * d);
-      target = new THREE.Vector3(0, -0.3, 0);
+      // Titelbild: Kamera schwenkt sanft vor dem Tisch hin und her
+      this.orbitAngle += dt;
+      const az = Math.sin(this.orbitAngle * 0.13) * 0.3;
+      const d = 12.6;
+      pos = new THREE.Vector3(Math.sin(az) * d, 6.9, Math.cos(az) * d);
+      target = new THREE.Vector3(0, 0.9, 0);
     } else {
       const p = this.seatCameraPose();
       pos = p.pos;

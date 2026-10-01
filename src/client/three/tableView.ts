@@ -8,7 +8,7 @@ import { type Stage, TABLE_R } from './stage';
 import { CARD_H, CARD_W, cardGlowTexture, dealerCoinTexture, ringTexture } from './textures';
 import { type Transform, ease, moveTo, setTransform } from './tween';
 
-const TRICK_R = 2.2;
+const TRICK_R = 2.4;
 /** Karten, die im Menü aufgefächert auf dem Tisch liegen */
 const SHOWCASE = [56, 38, 52, 12, 25];
 const OPP_HAND_R = 5.25;
@@ -45,6 +45,7 @@ export class TableView {
   private trick: CardMesh[] = [];
   private piles: CardMesh[][] = [];
   private trump: CardMesh | null = null;
+  private showcase: CardMesh[] = [];
   private n = 4;
   private me = 0;
   private round = 0;
@@ -103,10 +104,10 @@ export class TableView {
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    this.winGlow = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W * 2.2, CARD_H * 1.9), glowMat);
+    this.winGlow = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W * 2.5, CARD_H * 2.15), glowMat);
     this.winGlow.renderOrder = 3;
     stage.scene.add(this.winGlow);
-    this.trumpGlow = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W * 1.9, CARD_H * 1.65), glowMat.clone());
+    this.trumpGlow = new THREE.Mesh(new THREE.PlaneGeometry(CARD_W * 2.2, CARD_H * 1.9), glowMat.clone());
     this.trumpGlow.renderOrder = 3;
     stage.scene.add(this.trumpGlow);
 
@@ -166,7 +167,7 @@ export class TableView {
 
   private trumpSlot(): Transform {
     const top = 0.004 + this.deck.length * CARD_T * 1.08;
-    return { pos: new THREE.Vector3(0.28, top + 0.01, 0.18), quat: faceUp(0.32), scale: 1 };
+    return { pos: new THREE.Vector3(0.3, top + 0.01, 0.2), quat: faceUp(0.32), scale: 1.15 };
   }
 
   private trickSlot(seat: number, order: number, card: number): Transform {
@@ -179,7 +180,7 @@ export class TableView {
     pos.y = 0.03 + order * 0.012;
     let a = this.seatAngle(seat);
     if (a > Math.PI) a -= Math.PI * 2;
-    return { pos, quat: faceUp(-a * 0.12 + jitter(card, this.round + 9) * 0.22), scale: 1.16 };
+    return { pos, quat: faceUp(-a * 0.12 + jitter(card, this.round + 9) * 0.22), scale: 1.3 };
   }
 
   private pileBase(seat: number): THREE.Vector3 {
@@ -287,6 +288,7 @@ export class TableView {
 
   private resetMesh(m: CardMesh): void {
     this.stage.tweens.cancel(m);
+    m.userData.bob = null;
     if (m.parent !== this.stage.scene) this.stage.scene.attach(m);
     m.hover = 0;
     m.dim = false;
@@ -317,19 +319,38 @@ export class TableView {
       if (animate) void moveTo(this.stage.tweens, m, t, { duration: 600, delay: i * 6, arc: 0.6 });
       else setTransform(m, t);
     });
+    // Titelbild: Fächer schwebt über dem Tisch, zur Kamera gedreht, und wippt leicht
+    this.showcase = showcase;
     showcase.forEach((m, i) => {
       this.resetMesh(m);
       m.setCard(SHOWCASE[i]);
-      const k = i - (SHOWCASE.length - 1) / 2;
-      const pos = new THREE.Vector3(k * 0.62, 0.02 + i * 0.012, 1.55 + Math.abs(k) * 0.12);
-      const t: Transform = { pos, quat: faceUp(-k * 0.16), scale: 1.05 };
-      if (animate) void moveTo(this.stage.tweens, m, t, { duration: 700, delay: 300 + i * 90, arc: 0.8 });
-      else setTransform(m, t);
+      const f = m.face;
+      if (f) f.emissiveIntensity = Math.max(f.userData.baseEmissive ?? 0, 0.05);
+      const t = this.showcaseSlot(i);
+      m.userData.bob = null;
+      const done = () => {
+        if (this.showcase.includes(m)) m.userData.bob = t.pos.y;
+      };
+      if (animate) void moveTo(this.stage.tweens, m, t, { duration: 900, delay: 250 + i * 110, arc: 1.2 }).then(done);
+      else {
+        setTransform(m, t);
+        done();
+      }
     });
 
     this.dealerCoin.visible = false;
     this.setRing(null);
     this.setTrumpGlow(null);
+  }
+
+  private showcaseSlot(i: number): Transform {
+    const k = i - (SHOWCASE.length - 1) / 2;
+    const pos = new THREE.Vector3(k * 0.86, 1.75 - k * k * 0.07, 1.1 - k * k * 0.1 + i * 0.03);
+    const quat = new THREE.Quaternion()
+      .setFromAxisAngle(Y_AXIS, -k * 0.09)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -0.42))
+      .multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -k * 0.11));
+    return { pos, quat, scale: 1.45 };
   }
 
   rebuild(view: View): void {
@@ -343,6 +364,7 @@ export class TableView {
       this.layoutLobby(false);
       return;
     }
+    this.showcase = [];
     const pool = this.cards.slice();
     for (const m of pool) {
       this.resetMesh(m);
@@ -543,6 +565,7 @@ export class TableView {
     this.trick = [];
     this.piles = [];
     this.trump = null;
+    this.showcase = [];
     this.pending = null;
     this.hovered = null;
     this.selected = null;
@@ -754,6 +777,10 @@ export class TableView {
   }
 
   private frame(dt: number, now: number): void {
+    this.showcase.forEach((m, i) => {
+      const base = m.userData.bob as number | null;
+      if (base !== null && base !== undefined) m.position.y = base + Math.sin(now / 900 + i * 0.9) * 0.05;
+    });
     // Handkarten weich an ihre Zielposition ziehen
     const hand = this.hands[this.me] ?? [];
     const k = 1 - Math.exp(-dt * 14);

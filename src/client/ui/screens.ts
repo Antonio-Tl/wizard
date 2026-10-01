@@ -1,8 +1,10 @@
 import { MAX_PLAYERS, MIN_PLAYERS, totalRoundsFor } from '../../shared/rules';
-import { AVATARS, type ClientMsg, type Difficulty, type GameOptions, type View } from '../../shared/types';
+import { AVATAR_COUNT, type ClientMsg, type Difficulty, type GameOptions, type View } from '../../shared/types';
 import type { Settings } from '../settings';
 import type { Quality } from '../three/stage';
+import { AVATAR_NAMES, avatarImg } from './avatars';
 import { clear, fadeRemove, h, modal, seg, toast } from './dom';
+import { icon } from './icons';
 
 const screens = () => document.getElementById('screens')!;
 
@@ -37,26 +39,31 @@ export function showMenu(settings: Settings, actions: MenuActions, onChange: () 
       onChange();
     },
   }) as HTMLInputElement;
-  const avatars = h('div', { class: 'avatars' });
+  const avatars = h('div', { class: 'avatars', role: 'radiogroup', 'aria-label': 'Avatar' });
+  const avatarName = h('span', { class: 'avatar-name' });
   const renderAvatars = () => {
     clear(avatars);
-    AVATARS.forEach((a, i) =>
+    avatarName.textContent = AVATAR_NAMES[settings.avatar] ?? '';
+    for (let i = 0; i < AVATAR_COUNT; i++) {
       avatars.appendChild(
         h(
           'button',
           {
             class: i === settings.avatar ? 'on' : '',
-            'aria-label': `Avatar ${a}`,
+            title: AVATAR_NAMES[i],
+            role: 'radio',
+            'aria-checked': String(i === settings.avatar),
+            'aria-label': AVATAR_NAMES[i],
             onclick: () => {
               settings.avatar = i;
               onChange();
               renderAvatars();
             },
           },
-          a,
+          avatarImg(i),
         ),
-      ),
-    );
+      );
+    }
   };
   renderAvatars();
   const needName = (fn: () => void) => () => {
@@ -108,21 +115,21 @@ export function showMenu(settings: Settings, actions: MenuActions, onChange: () 
       { class: 'menu panel' },
       h('div', { class: 'title' }, h('h1', { class: 'gold-text' }, 'Wizard'), h('p', null, 'Das magische Stichspiel')),
       h('div', { class: 'field' }, h('label', { class: 'label' }, 'Name'), nameInput),
-      h('div', { class: 'field' }, h('label', { class: 'label' }, 'Avatar'), avatars),
+      h('div', { class: 'field' }, h('label', { class: 'label' }, 'Wappen', avatarName), avatars),
       h(
         'div',
         { class: 'menu-actions' },
-        actions.canResume ? h('button', { class: 'btn primary', onclick: needName(actions.resume) }, '▶ Spiel fortsetzen') : null,
-        h('button', { class: `btn ${actions.canResume ? '' : 'primary'}`, onclick: needName(actions.single) }, '🤖 Gegen Bots spielen'),
-        h('button', { class: 'btn', onclick: needName(actions.create) }, '✨ Online-Raum erstellen'),
+        actions.canResume ? h('button', { class: 'btn primary', onclick: needName(actions.resume) }, 'Spiel fortsetzen') : null,
+        h('button', { class: `btn ${actions.canResume ? '' : 'primary'}`, onclick: needName(actions.single) }, 'Gegen Bots spielen'),
+        h('button', { class: 'btn', onclick: needName(actions.create) }, 'Online-Raum erstellen'),
         h('div', { class: 'divider' }, 'oder beitreten'),
         h('div', { class: 'menu-row' }, codeInput, joinBtn),
       ),
       h(
         'div',
         { class: 'menu-foot' },
-        h('button', { class: 'btn ghost small', onclick: actions.rules }, '📖 Regeln'),
-        h('button', { class: 'btn ghost small', onclick: actions.settings }, '⚙ Einstellungen'),
+        h('button', { class: 'btn ghost small', onclick: actions.rules }, 'Regeln'),
+        h('button', { class: 'btn ghost small', onclick: actions.settings }, 'Einstellungen'),
       ),
     ),
   );
@@ -328,14 +335,14 @@ export function renderLobby(view: View, send: (msg: ClientMsg) => void, leave: (
       h(
         'div',
         { class: 'seat' },
-        h('div', { class: 'av' }, AVATARS[p.avatar]),
+        h('div', { class: 'av' }, avatarImg(p.avatar)),
         h('div', { class: 'nm' }, p.name),
         h(
           'div',
           { class: 'tags' },
           i === view.you ? h('span', { class: 'tag you' }, 'Du') : null,
-          p.isHost ? h('span', { class: 'tag gold' }, '👑 Host') : null,
-          p.bot ? h('span', { class: 'tag' }, `🤖 ${DIFF_LABEL[p.bot]}`) : null,
+          p.isHost ? h('span', { class: 'tag gold' }, 'Host') : null,
+          p.bot ? h('span', { class: 'tag' }, `Bot · ${DIFF_LABEL[p.bot]}`) : null,
           !p.connected ? h('span', { class: 'tag off' }, 'getrennt') : null,
           isHost && i !== view.you ? h('button', { class: 'btn ghost small', title: 'Entfernen', onclick: () => send({ t: 'kick', seat: i }) }, '✕') : null,
         ),
@@ -372,7 +379,7 @@ export function renderLobby(view: View, send: (msg: ClientMsg) => void, leave: (
         'div',
         { class: 'lobby-head' },
         h('div', null, h('div', { class: 'room-sub' }, 'Raumcode'), h('div', { class: 'room-code gold-text' }, view.room ?? '')),
-        h('button', { class: 'btn small', onclick: copy }, '🔗 Einladen'),
+        h('button', { class: 'btn small', onclick: copy }, icon('link', 16), 'Einladen'),
       ),
       seats,
       optionFields(view.options, (o) => send({ t: 'options', options: o }), !isHost, true),

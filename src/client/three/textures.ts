@@ -1046,8 +1046,8 @@ export function emblemIcon(suit: Suit, px = 64): string {
 
 // ───────────────────────── Tisch & Umgebung ─────────────────────────
 
-export function feltTextures(): { map: THREE.Texture; normal: THREE.Texture } {
-  const S = 1024;
+export function feltTextures(S = 2048): { map: THREE.Texture; normal: THREE.Texture } {
+  const k = S / 1024;
   const [c, ctx] = makeCanvas(S, S);
   const base = ctx.createRadialGradient(S / 2, S / 2, S * 0.05, S / 2, S / 2, S * 0.5);
   base.addColorStop(0, '#3a2c6e');
@@ -1063,19 +1063,19 @@ export function feltTextures(): { map: THREE.Texture; normal: THREE.Texture } {
   ctx.globalAlpha = 1;
   // eingeprägter Ring
   ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-  ctx.lineWidth = 10;
+  ctx.lineWidth = 10 * k;
   ctx.beginPath();
   ctx.arc(S / 2, S / 2, S * 0.455, 0, Math.PI * 2);
   ctx.stroke();
   ctx.strokeStyle = 'rgba(214,176,96,0.18)';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2 * k;
   ctx.beginPath();
   ctx.arc(S / 2, S / 2, S * 0.445, 0, Math.PI * 2);
   ctx.stroke();
   grain(ctx, S, S, 16, 5);
 
-  // Normalmap aus feinem Faserrauschen
-  const N = 512;
+  // Normalmap aus feinem Faserrauschen (gekachelt → feine Struktur auch aus der Nähe)
+  const N = S >= 2048 ? 1024 : 512;
   const [nc, nctx] = makeCanvas(N, N);
   const h = new Float32Array(N * N);
   for (let y = 0; y < N; y++) {
@@ -1104,7 +1104,7 @@ export function feltTextures(): { map: THREE.Texture; normal: THREE.Texture } {
   nctx.putImageData(img, 0, 0);
   const normal = toTexture(nc, false);
   normal.wrapS = normal.wrapT = THREE.RepeatWrapping;
-  normal.repeat.set(6, 6);
+  normal.repeat.set(S >= 2048 ? 7 : 6, S >= 2048 ? 7 : 6);
   return { map: toTexture(c), normal };
 }
 
@@ -1147,15 +1147,16 @@ export function woodTextures(): { map: THREE.Texture; bump: THREE.Texture } {
 }
 
 /** Leuchtender Magiekreis (transparent, für additive Darstellung). */
-export function magicCircleTexture(): THREE.Texture {
-  const S = 1024;
+export function magicCircleTexture(S = 2048): THREE.Texture {
   const [c, ctx] = makeCanvas(S, S);
-  const cx = S / 2;
-  ctx.translate(cx, cx);
+  // Zeichnung im 1024er-Raster, auf die Zielauflösung skaliert
+  const k = S / 1024;
+  ctx.scale(k, k);
+  ctx.translate(512, 512);
   ctx.strokeStyle = '#ffd98a';
   ctx.fillStyle = '#ffd98a';
   ctx.shadowColor = '#ffb84a';
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = 12 * k;
   const ring = (r: number, w: number) => {
     ctx.lineWidth = w;
     ctx.beginPath();

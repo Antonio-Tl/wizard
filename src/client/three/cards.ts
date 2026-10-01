@@ -93,6 +93,28 @@ function buildCardGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * Schärfere Mipmap-Auswahl für Kartentexturen: Kleine, schräg liegende Karten auf dem
+ * Tisch würden sonst eine zu weiche Stufe bekommen. Ein leicht negativer LOD-Bias
+ * hält Zahlen und Schrift lesbar, ohne sichtbares Flimmern.
+ */
+const CARD_LOD_BIAS = -0.65;
+const MAP_SHARP = THREE.ShaderChunk.map_fragment.replace('texture2D( map, vMapUv )', `texture2D( map, vMapUv, ${CARD_LOD_BIAS.toFixed(2)} )`);
+const EMISSIVE_SHARP = THREE.ShaderChunk.emissivemap_fragment.replace(
+  'texture2D( emissiveMap, vEmissiveMapUv )',
+  `texture2D( emissiveMap, vEmissiveMapUv, ${CARD_LOD_BIAS.toFixed(2)} )`,
+);
+
+function sharpen<T extends THREE.Material>(m: T): T {
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <map_fragment>', MAP_SHARP)
+      .replace('#include <emissivemap_fragment>', EMISSIVE_SHARP);
+  };
+  m.customProgramCacheKey = () => 'card-sharp';
+  return m;
+}
+
 let geometry: THREE.BufferGeometry | null = null;
 let backMaterial: THREE.MeshStandardMaterial | null = null;
 let edgeMaterial: THREE.MeshStandardMaterial | null = null;
@@ -105,14 +127,14 @@ function sharedGeometry(): THREE.BufferGeometry {
 function sharedBack(): THREE.MeshStandardMaterial {
   if (!backMaterial) {
     const t = cardBackTextures();
-    backMaterial = new THREE.MeshStandardMaterial({
+    backMaterial = sharpen(new THREE.MeshStandardMaterial({
       map: t.map,
       roughnessMap: t.pbr,
       metalnessMap: t.pbr,
       roughness: 1,
       metalness: 1,
       envMapIntensity: 0.45,
-    });
+    }));
   }
   return backMaterial;
 }
@@ -125,7 +147,7 @@ export function faceMaterial(id: CardId): THREE.MeshStandardMaterial {
   let m = faceMaterials.get(id);
   if (!m) {
     const t = cardFaceTextures(id);
-    m = new THREE.MeshStandardMaterial({
+    m = sharpen(new THREE.MeshStandardMaterial({
       map: t.map,
       roughnessMap: t.pbr,
       metalnessMap: t.pbr,
@@ -135,7 +157,7 @@ export function faceMaterial(id: CardId): THREE.MeshStandardMaterial {
       emissive: new THREE.Color(0xffffff),
       emissiveMap: t.emissive ?? t.map,
       emissiveIntensity: 0,
-    });
+    }));
     m.userData.baseEmissive = t.emissive ? 0.55 : 0;
     m.emissiveIntensity = m.userData.baseEmissive;
     faceMaterials.set(id, m);

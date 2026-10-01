@@ -1,10 +1,12 @@
 import { type Suit, SUIT_INFO, isWizard } from '../../shared/cards';
 import { trickWinnerIndex } from '../../shared/rules';
-import { AVATARS, type ClientMsg, type GameEvent, type View } from '../../shared/types';
+import type { ClientMsg, GameEvent, View } from '../../shared/types';
 import { sfx } from '../audio';
 import type { TableView } from '../three/tableView';
 import { cardPreview, emblemIcon } from '../three/textures';
+import { avatarImg } from './avatars';
 import { type ModalHandle, banner, clear, h, modal, toast } from './dom';
+import { icon } from './icons';
 
 export interface HudActions {
   send(msg: ClientMsg): void;
@@ -102,10 +104,10 @@ export class Hud {
     const trump = h('div', { class: 'info-cell trump-cell' });
     const bids = h('div', { class: 'info-v bidsum' }, '–');
     this.info = { round, trump, bids };
-    this.soundBtn = h('button', { class: 'icon-btn', title: 'Ton an/aus', onclick: () => this.toggleSound() }, this.actions.soundOn() ? '🔊' : '🔇');
+    this.soundBtn = h('button', { class: 'icon-btn', title: 'Ton an/aus', 'aria-label': 'Ton an/aus', onclick: () => this.toggleSound() }, icon(this.actions.soundOn() ? 'soundOn' : 'soundOff'));
     this.chatBtn = this.actions.isLocal()
       ? null
-      : h('button', { class: 'icon-btn', title: 'Chat', onclick: () => this.toggleChat() }, '💬', this.unread ? h('span', { class: 'dot' }) : null);
+      : h('button', { class: 'icon-btn', title: 'Chat', 'aria-label': 'Chat', onclick: () => this.toggleChat() }, icon('chat'), this.unread ? h('span', { class: 'dot' }) : null);
     const bar = h(
       'div',
       { class: 'topbar' },
@@ -119,12 +121,12 @@ export class Hud {
       h(
         'div',
         { class: 'tools' },
-        h('button', { class: 'icon-btn', title: 'Punktetabelle', onclick: () => this.openScores() }, '📜'),
-        h('button', { class: 'icon-btn', title: 'Letzter Stich', onclick: () => this.openLastTrick() }, '👁'),
+        h('button', { class: 'icon-btn', title: 'Punktetabelle', 'aria-label': 'Punktetabelle', onclick: () => this.openScores() }, icon('trophy')),
+        h('button', { class: 'icon-btn', title: 'Letzter Stich', 'aria-label': 'Letzter Stich', onclick: () => this.openLastTrick() }, icon('history')),
         this.chatBtn,
         this.soundBtn,
-        h('button', { class: 'icon-btn', title: 'Einstellungen', onclick: () => this.actions.openSettings() }, '⚙'),
-        h('button', { class: 'icon-btn', title: 'Spiel verlassen', onclick: () => this.confirmLeave() }, '🚪'),
+        h('button', { class: 'icon-btn', title: 'Einstellungen', 'aria-label': 'Einstellungen', onclick: () => this.actions.openSettings() }, icon('sliders')),
+        h('button', { class: 'icon-btn', title: 'Spiel verlassen', 'aria-label': 'Spiel verlassen', onclick: () => this.confirmLeave() }, icon('exit')),
       ),
     );
     this.root.appendChild(bar);
@@ -132,7 +134,7 @@ export class Hud {
 
   private toggleSound(): void {
     const on = this.actions.toggleSound();
-    if (this.soundBtn) this.soundBtn.textContent = on ? '🔊' : '🔇';
+    if (this.soundBtn) this.soundBtn.replaceChildren(icon(on ? 'soundOn' : 'soundOff'));
   }
 
   // ───────────────────────── Zustand ─────────────────────────
@@ -204,9 +206,10 @@ export class Hud {
       l.root.classList.toggle('turn', view.turn === seat && ['bidding', 'playing', 'trump'].includes(view.phase));
       l.root.classList.toggle('offline', !p.connected);
       clear(l.av);
-      l.av.append(AVATARS[p.avatar] ?? '🧙');
+      l.av.append(avatarImg(p.avatar));
       if (view.dealer === seat) l.av.append(h('span', { class: 'dealer', title: 'Geber' }, 'G'));
-      l.nm.textContent = (seat === view.you ? 'Du' : p.name) + (p.bot && !p.replaced ? ' 🤖' : '') + (p.replaced ? ' (Bot)' : '');
+      l.nm.replaceChildren(seat === view.you ? 'Du' : p.name);
+      if (p.bot) l.nm.append(h('span', { class: 'bot-tag', title: p.replaced ? 'Bot spielt für den Spieler' : 'Computergegner' }, 'Bot'));
       clear(l.st);
       if (!p.connected) l.st.append('getrennt …');
       else if (p.bid === null) {
@@ -444,7 +447,7 @@ export class Hud {
       return h(
         'div',
         { class: `rr ${seat === view.you ? 'me' : ''}`, style: `animation-delay:${idx * 70}ms` },
-        h('div', { class: 'av' }, AVATARS[p.avatar]),
+        h('div', { class: 'av' }, avatarImg(p.avatar)),
         h('div', { class: 'nm' }, seat === view.you ? 'Du' : p.name, r.bid === r.tricks ? h('small', null, '✓') : null),
         h('div', { class: 'c' }, `${r.tricks} / ${r.bid}`),
         h('div', { class: `d ${r.delta > 0 ? 'pos' : 'neg'}` }, r.delta > 0 ? `+${r.delta}` : String(r.delta)),
@@ -529,7 +532,7 @@ export class Hud {
         return h(
           'div',
           { class: `pod p${Math.min(3, order.indexOf(seat) + 1)}` },
-          h('div', { class: 'av' }, AVATARS[p.avatar]),
+          h('div', { class: 'av' }, avatarImg(p.avatar)),
           h('div', { class: 'nm' }, seat === view.you ? 'Du' : p.name),
           h('div', { class: 'pts' }, `${p.score} Punkte`),
           h('div', { class: 'block' }, String(place)),
@@ -540,7 +543,7 @@ export class Hud {
       h(
         'div',
         { class: `rr ${seat === view.you ? 'me' : ''}` },
-        h('div', { class: 'av' }, AVATARS[view.players[seat].avatar]),
+        h('div', { class: 'av' }, avatarImg(view.players[seat].avatar)),
         h('div', { class: 'nm' }, `${placeOf(seat)}. ${seat === view.you ? 'Du' : view.players[seat].name}`),
         h('div'),
         h('div'),
@@ -576,7 +579,7 @@ export class Hud {
       'tr',
       null,
       h('th', null, 'Rd.'),
-      v.players.map((p, i) => h('th', null, h('span', { class: 'av' }, AVATARS[p.avatar]), i === v.you ? 'Du' : p.name)),
+      v.players.map((p, i) => h('th', null, h('span', { class: 'av' }, avatarImg(p.avatar)), i === v.you ? 'Du' : p.name)),
     );
     const rows = v.history.map((rec) =>
       h(
@@ -704,7 +707,7 @@ export class Hud {
     const quick = h(
       'div',
       { class: 'quick' },
-      ['👍', '😂', '😮', '😅', '🔥', '🧙', 'GG'].map((q) => h('button', { onclick: () => send(q) }, q)),
+      ['Gut gespielt!', 'Knapp!', 'Oh nein …', 'Glückwunsch!', 'GG'].map((q) => h('button', { onclick: () => send(q) }, q)),
     );
     this.chatPanel = h(
       'div',
@@ -721,7 +724,7 @@ export class Hud {
           },
         },
         input,
-        h('button', { class: 'btn small primary', type: 'submit' }, '➤'),
+        h('button', { class: 'btn small primary', type: 'submit' }, 'Senden'),
       ),
     );
     this.root.appendChild(this.chatPanel);
